@@ -350,10 +350,10 @@ func (s *testSuite) TestExplain(c *C) {
 		{
 			"select * from t2 order by t2.c2 limit 0, 1",
 			[]string{
-				"TableScan_5", "Sort_6",
+				"TableScan_7", "Sort_8",
 			},
 			[]string{
-				"Sort_6", "",
+				"Sort_8", "",
 			},
 			[]string{
 				`{
@@ -382,7 +382,7 @@ func (s *testSuite) TestExplain(c *C) {
         }
     ],
     "limit": 1,
-    "child": "TableScan_5"
+    "child": "TableScan_7"
 }`,
 			},
 		},
@@ -619,8 +619,8 @@ func (s *testSuite) TestExplain(c *C) {
 		},
 		{
 			"select s.c1 from t2 s left outer join t2 t on s.c2 = t.c2 limit 10",
-			[]string{"TableScan_7", "Limit_8", "TableScan_9", "HashLeftJoin_6", "Limit_10", "Projection_4"},
-			[]string{"Limit_8", "HashLeftJoin_6", "HashLeftJoin_6", "Limit_10", "Projection_4", ""},
+			[]string{"TableScan_13", "Limit_14", "Limit_15", "TableScan_16", "HashLeftJoin_12", "Limit_17", "Projection_4"},
+			[]string{"Limit_14", "Limit_15", "HashLeftJoin_12", "HashLeftJoin_12", "Limit_17", "Projection_4", ""},
 			[]string{
 				`{
     "db": "test",
@@ -637,7 +637,12 @@ func (s *testSuite) TestExplain(c *C) {
 				`{
     "limit": 10,
     "offset": 0,
-    "child": "TableScan_7"
+    "child": "TableScan_13"
+}`,
+				`{
+    "limit": 10,
+    "offset": 0,
+    "child": "Limit_14"
 }`,
 				`{
     "db": "test",
@@ -658,19 +663,19 @@ func (s *testSuite) TestExplain(c *C) {
     "leftCond": null,
     "rightCond": null,
     "otherCond": null,
-    "leftPlan": "Limit_8",
-    "rightPlan": "TableScan_9"
+    "leftPlan": "Limit_15",
+    "rightPlan": "TableScan_16"
 }`,
 				`{
     "limit": 10,
     "offset": 0,
-    "child": "HashLeftJoin_6"
+    "child": "HashLeftJoin_12"
 }`,
 				`{
     "exprs": [
         "s.c1"
     ],
-    "child": "Limit_10"
+    "child": "Limit_17"
 }`,
 			},
 		},

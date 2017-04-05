@@ -191,6 +191,8 @@ type LogicalPlan interface {
 
 	// buildKeyInfo will collect the information of unique keys into schema.
 	buildKeyInfo()
+
+	pushTopN(topn *Sort) LogicalPlan
 }
 
 // PhysicalPlan is a tree of the physical operators.

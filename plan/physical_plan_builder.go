@@ -1444,8 +1444,8 @@ func (p *Sort) convert2PhysicalPlan(prop *requiredProperty) (*physicalPlanInfo, 
 		}
 	}
 	selfProp.sortKeyLen = len(selfProp.props)
-	if len(selfProp.props) != 0 && len(prop.props) == 0 && prop.limit != nil {
-		selfProp.limit = prop.limit
+	if len(selfProp.props) != 0 {
+		selfProp.limit = p.ExecLimit
 	}
 	sortedPlanInfo, err := p.children[0].(LogicalPlan).convert2PhysicalPlan(selfProp)
 	if err != nil {
@@ -1458,12 +1458,10 @@ func (p *Sort) convert2PhysicalPlan(prop *requiredProperty) (*physicalPlanInfo, 
 	sortCost := sortCost(unSortedPlanInfo.count)
 	if len(selfProp.props) == 0 {
 		np := p.Copy().(*Sort)
-		np.ExecLimit = prop.limit
 		sortedPlanInfo = addPlanToResponse(np, sortedPlanInfo)
 	} else if sortCost+unSortedPlanInfo.cost < sortedPlanInfo.cost {
 		sortedPlanInfo.cost = sortCost + unSortedPlanInfo.cost
 		np := p.Copy().(*Sort)
-		np.ExecLimit = selfProp.limit
 		sortedPlanInfo = addPlanToResponse(np, unSortedPlanInfo)
 	}
 	if !matchProp(p.ctx, prop, selfProp) {
