@@ -66,17 +66,17 @@ func (s *Sort) setChild(p LogicalPlan) LogicalPlan {
 	}
 }
 
-func (p *Sort) pushDownTopN(topN *Sort) LogicalPlan {
+func (s *Sort) pushDownTopN(topN *Sort) LogicalPlan {
 	if topN.isLimit() {
-		p.ExecLimit = topN.ExecLimit
+		s.ExecLimit = topN.ExecLimit
 		// If a Limit is pushDowned, the Sort should be converted to topN and be pushed again.
-		return p.children[0].(LogicalPlan).pushDownTopN(p)
+		return s.children[0].(LogicalPlan).pushDownTopN(s)
 	} else if topN.isEmpty() {
 		// If nothing is pushDowned, just continue to push nothing to its child.
-		return p.baseLogicalPlan.pushDownTopN(topN)
+		return s.baseLogicalPlan.pushDownTopN(topN)
 	} else {
 		// If a TopN is pushDowned, this sort is useless.
-		return p.children[0].(LogicalPlan).pushDownTopN(topN)
+		return s.children[0].(LogicalPlan).pushDownTopN(topN)
 	}
 }
 
