@@ -33,7 +33,7 @@ const (
 	flagDecorrelate
 	flagPredicatePushDown
 	flagAggregationOptimize
-	flagPushTopN
+	flagPushDownTopN
 )
 
 var optRuleList = []logicalOptRule{
@@ -42,7 +42,7 @@ var optRuleList = []logicalOptRule{
 	&decorrelateSolver{},
 	&ppdSolver{},
 	&aggregationOptimizer{},
-	&pushTopNSolver{},
+	&pushDownTopNSolver{},
 }
 
 // logicalOptRule means a logical optimizing rule, which contains decorrelate, ppd, column pruning, etc.

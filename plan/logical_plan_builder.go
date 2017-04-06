@@ -473,7 +473,7 @@ func getUintForLimitOffset(sc *variable.StatementContext, val interface{}) (uint
 }
 
 func (b *planBuilder) buildLimit(src LogicalPlan, limit *ast.Limit) LogicalPlan {
-	b.optFlag = b.optFlag | flagPushTopN
+	b.optFlag = b.optFlag | flagPushDownTopN
 	var (
 		offset, count uint64
 		err           error

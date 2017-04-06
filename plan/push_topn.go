@@ -18,19 +18,20 @@ import (
 	"github.com/pingcap/tidb/expression"
 )
 
-type pushTopNSolver struct {
+// pushDownTopNSolver push down the topn or limit. In future we will remove the limit from `requiredProperty` in CBO phase.
+type pushDownTopNSolver struct {
 	ctx       context.Context
 	allocator *idAllocator
 }
 
-func (s *pushTopNSolver) optimize(p LogicalPlan, ctx context.Context, allocator *idAllocator) (LogicalPlan, error) {
-	return p.pushTopN(Sort{}.init(allocator, ctx)), nil
+func (s *pushDownTopNSolver) optimize(p LogicalPlan, ctx context.Context, allocator *idAllocator) (LogicalPlan, error) {
+	return p.pushDownTopN(Sort{}.init(allocator, ctx)), nil
 }
 
-func (s *baseLogicalPlan) pushTopN(topN *Sort) LogicalPlan {
+func (s *baseLogicalPlan) pushDownTopN(topN *Sort) LogicalPlan {
 	p := s.basePlan.self.(LogicalPlan)
 	for i, child := range p.Children() {
-		p.Children()[i] = child.(LogicalPlan).pushTopN(Sort{}.init(topN.allocator, topN.ctx))
+		p.Children()[i] = child.(LogicalPlan).pushDownTopN(Sort{}.init(topN.allocator, topN.ctx))
 		p.Children()[i].SetParents(p)
 	}
 	return topN.setChild(p)
@@ -65,26 +66,26 @@ func (s *Sort) setChild(p LogicalPlan) LogicalPlan {
 	}
 }
 
-func (p *Sort) pushTopN(topN *Sort) LogicalPlan {
+func (p *Sort) pushDownTopN(topN *Sort) LogicalPlan {
 	if topN.isLimit() {
 		p.ExecLimit = topN.ExecLimit
-		// If a Limit is pushed, the Sort should be converted to topN and be pushed again.
-		return p.children[0].(LogicalPlan).pushTopN(p)
+		// If a Limit is pushDowned, the Sort should be converted to topN and be pushed again.
+		return p.children[0].(LogicalPlan).pushDownTopN(p)
 	} else if topN.isEmpty() {
-		// If nothing is pushed, just continue to push nothing to its child.
-		return p.baseLogicalPlan.pushTopN(topN)
+		// If nothing is pushDowned, just continue to push nothing to its child.
+		return p.baseLogicalPlan.pushDownTopN(topN)
 	} else {
-		// If a TopN is pushed, this sort is useless.
-		return p.children[0].(LogicalPlan).pushTopN(topN)
+		// If a TopN is pushDowned, this sort is useless.
+		return p.children[0].(LogicalPlan).pushDownTopN(topN)
 	}
 }
 
-func (p *Limit) pushTopN(topN *Sort) LogicalPlan {
-	child := p.children[0].(LogicalPlan).pushTopN(Sort{ExecLimit: p}.init(p.allocator, p.ctx))
+func (p *Limit) pushDownTopN(topN *Sort) LogicalPlan {
+	child := p.children[0].(LogicalPlan).pushDownTopN(Sort{ExecLimit: p}.init(p.allocator, p.ctx))
 	return topN.setChild(child)
 }
 
-func (p *Union) pushTopN(topN *Sort) LogicalPlan {
+func (p *Union) pushDownTopN(topN *Sort) LogicalPlan {
 	for i, child := range p.children {
 		newTopN := Sort{}.init(p.allocator, p.ctx)
 		for _, by := range topN.ByItems {
@@ -94,23 +95,23 @@ func (p *Union) pushTopN(topN *Sort) LogicalPlan {
 		if !topN.isEmpty() {
 			newTopN.ExecLimit = &Limit{Count: topN.ExecLimit.Count}
 		}
-		p.children[i] = child.(LogicalPlan).pushTopN(newTopN)
+		p.children[i] = child.(LogicalPlan).pushDownTopN(newTopN)
 		p.children[i].SetParents(p)
 	}
 	return topN.setChild(p)
 }
 
-func (p *Projection) pushTopN(topN *Sort) LogicalPlan {
+func (p *Projection) pushDownTopN(topN *Sort) LogicalPlan {
 	for _, by := range topN.ByItems {
 		by.Expr = expression.ColumnSubstitute(by.Expr, p.schema, p.Exprs)
 	}
-	child := p.children[0].(LogicalPlan).pushTopN(topN)
+	child := p.children[0].(LogicalPlan).pushDownTopN(topN)
 	p.SetChildren(child)
 	child.SetParents(p)
 	return p
 }
 
-func (p *Join) pushTopNToChild(topN *Sort, idx int) LogicalPlan {
+func (p *LogicalJoin) pushDownTopNToChild(topN *Sort, idx int) LogicalPlan {
 	canPush := true
 	for _, by := range topN.ByItems {
 		cols := expression.ExtractColumns(by.Expr)
@@ -127,23 +128,24 @@ func (p *Join) pushTopNToChild(topN *Sort, idx int) LogicalPlan {
 		newTopN.ByItems = make([]*ByItems, len(topN.ByItems))
 		copy(newTopN.ByItems, topN.ByItems)
 	}
-	return p.children[idx].(LogicalPlan).pushTopN(newTopN)
+	return p.children[idx].(LogicalPlan).pushDownTopN(newTopN)
 }
 
-func (p *Join) pushTopN(topN *Sort) LogicalPlan {
+func (p *LogicalJoin) pushDownTopN(topN *Sort) LogicalPlan {
 	var leftChild, rightChild LogicalPlan
 	emptySort := Sort{}.init(p.allocator, p.ctx)
 	switch p.JoinType {
 	case LeftOuterJoin, LeftOuterSemiJoin:
-		leftChild = p.pushTopNToChild(topN, 0)
-		rightChild = p.children[1].(LogicalPlan).pushTopN(emptySort)
+		leftChild = p.pushDownTopNToChild(topN, 0)
+		rightChild = p.children[1].(LogicalPlan).pushDownTopN(emptySort)
 	case RightOuterJoin:
-		leftChild = p.children[0].(LogicalPlan).pushTopN(emptySort)
-		rightChild = p.pushTopNToChild(topN, 1)
+		leftChild = p.children[0].(LogicalPlan).pushDownTopN(emptySort)
+		rightChild = p.pushDownTopNToChild(topN, 1)
 	default:
-		return p.baseLogicalPlan.pushTopN(topN)
+		return p.baseLogicalPlan.pushDownTopN(topN)
 	}
 	p.SetChildren(leftChild, rightChild)
+	// The LogicalJoin may be also a LogicalApply. So we must use self to set parents.
 	self := p.self.(LogicalPlan)
 	leftChild.SetParents(self)
 	rightChild.SetParents(self)
